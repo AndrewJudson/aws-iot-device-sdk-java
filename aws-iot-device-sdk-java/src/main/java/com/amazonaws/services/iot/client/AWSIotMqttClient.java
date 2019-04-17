@@ -208,6 +208,10 @@ public class AWSIotMqttClient extends AbstractAwsIotClient {
         super(clientEndpoint, clientId, awsAccessKeyId, awsSecretAccessKey, null);
     }
 
+    public AWSIotMqttClient(String clientEndpoint, String clientId, String awsAccessKeyId, String awsSecretAccessKey, Integer port) {
+        super(clientEndpoint, clientId, awsAccessKeyId, awsSecretAccessKey, null, port);
+    }
+
     /**
      * Instantiates a new client using Secure WebSocket and AWS SigV4
      * authentication. AWS IAM credentials, including the access key ID and

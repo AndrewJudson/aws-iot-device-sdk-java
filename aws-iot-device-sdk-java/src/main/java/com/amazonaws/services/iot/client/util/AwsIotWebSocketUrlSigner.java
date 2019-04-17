@@ -71,6 +71,7 @@ public class AwsIotWebSocketUrlSigner {
     private String awsAccessKeyId;
     private String sessionToken;
     private Mac signingSecretMac;
+    private Integer port;
 
     /**
      * Instantiates a new URL signer instance with endpoint only.
@@ -102,6 +103,24 @@ public class AwsIotWebSocketUrlSigner {
         } else {
             this.regionName = region;
         }
+    }
+
+    public AwsIotWebSocketUrlSigner(String endpoint, String region, Integer port) {
+        if (endpoint == null) {
+            throw new IllegalArgumentException("Invalid endpoint provided");
+        }
+        this.endpoint = endpoint.trim().toLowerCase();
+        if (region == null) {
+            throw new IllegalArgumentException("Invalid region provided");
+        } else if(region.equals(REGION_TO_BE_DETERMINED)) {
+            this.regionName = getRegionFromEndpoint(this.endpoint);
+            if(this.regionName == null) {
+                throw new IllegalArgumentException("Could not extract region from endpoint provided");
+            }
+        } else {
+            this.regionName = region;
+        }
+        this.port = port;
     }
 
     /**
@@ -236,6 +255,64 @@ public class AwsIotWebSocketUrlSigner {
 
         // Now build the URL.
         String requestUrl = "wss://" + endpoint + CANONICAL_URI + "?" + canonicalQueryStringBuilder.toString();
+
+        // If there are session credentials (from an STS server, AssumeRole, or
+        // Amazon Cognito),
+        // append the session token to the end of the URL string after signing.
+        if (sessionToken != null) {
+            requestUrl += "&X-Amz-Security-Token=" + sessionToken;
+        }
+
+        return requestUrl;
+    }
+
+    public String getSignedUrlSocat(final Date signingDate) throws AWSIotException {
+        Date dateToUse = signingDate;
+        if (dateToUse == null) {
+            dateToUse = new Date();
+        }
+
+        // SigV4 canonical string uses time in two formats
+        String amzDate = getAmzDate(dateToUse);
+        String dateStamp = getDateStamp(dateToUse);
+        // Credential scoped to date and region
+        String credentialScope = dateStamp + "/" + regionName + "/" + ServiceName + "/aws4_request";
+        // Now build the canonical string
+        StringBuilder canonicalQueryStringBuilder = new StringBuilder();
+        canonicalQueryStringBuilder.append("X-Amz-Algorithm=").append(ALGORITHM);
+        canonicalQueryStringBuilder.append("&X-Amz-Credential=");
+        try {
+            canonicalQueryStringBuilder.append(URLEncoder.encode(awsAccessKeyId + "/" + credentialScope, UTF8));
+        } catch (UnsupportedEncodingException e) {
+            throw new AWSIotException("Error encoding URL when building WebSocket URL");
+        }
+        canonicalQueryStringBuilder.append("&X-Amz-Date=").append(amzDate);
+        canonicalQueryStringBuilder.append("&X-Amz-SignedHeaders=host");
+
+        // headers and payload for the signing request
+        // not used in an WebSocket URL, but encoded into the signature string
+        String canonicalHeaders = "host:" + endpoint + "\n";
+        String payloadHash = stringToHex(hash(""));
+
+        // The request to sign includes the HTTP method, path, query string,
+        // headers and payload
+        String canonicalRequest = METHOD + "\n" + CANONICAL_URI + "\n" + canonicalQueryStringBuilder.toString() + "\n"
+                + canonicalHeaders + "\nhost\n" + payloadHash;
+
+        // Create a string to sign, generate a signing key...
+        String stringToSign = ALGORITHM + "\n" + amzDate + "\n" + credentialScope + "\n"
+                + stringToHex(hash(canonicalRequest));
+        byte[] signingKey = getSigningKey(dateStamp);
+        // ...and sign the string.
+        byte[] signatureBytes = sign(stringToSign, signingKey);
+        String signature = stringToHex(signatureBytes);
+
+        // Add the signature to the query string.
+        canonicalQueryStringBuilder.append("&X-Amz-Signature=");
+        canonicalQueryStringBuilder.append(signature);
+
+        // Now build the URL.
+        String requestUrl = "wss://" + "127.0.0.1" + ":" + Integer.toString(port) + CANONICAL_URI + "?" + canonicalQueryStringBuilder.toString();
 
         // If there are session credentials (from an STS server, AssumeRole, or
         // Amazon Cognito),

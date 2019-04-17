@@ -98,6 +98,13 @@ public abstract class AbstractAwsIotClient implements AwsIotConnectionCallback {
     }
 
     protected AbstractAwsIotClient(String clientEndpoint, String clientId, String awsAccessKeyId,
+                                   String awsSecretAccessKey, String sessionToken, boolean enableSdkMetrics, Integer port) {
+        //setting the region blank to ensure it's determined from the clientEndpoint
+        this(clientEndpoint, clientId, awsAccessKeyId, awsSecretAccessKey, sessionToken, "", enableSdkMetrics, port);
+    }
+
+
+    protected AbstractAwsIotClient(String clientEndpoint, String clientId, String awsAccessKeyId,
                                    String awsSecretAccessKey, String sessionToken,
                                    String region, boolean enableSdkMetrics) {
         this.clientEndpoint = clientEndpoint;
@@ -113,9 +120,30 @@ public abstract class AbstractAwsIotClient implements AwsIotConnectionCallback {
     }
 
     protected AbstractAwsIotClient(String clientEndpoint, String clientId, String awsAccessKeyId,
+                                   String awsSecretAccessKey, String sessionToken,
+                                   String region, boolean enableSdkMetrics, Integer internalPort) {
+        this.clientEndpoint = clientEndpoint;
+        this.clientId = clientId;
+        this.connectionType = AwsIotConnectionType.MQTT_OVER_WEBSOCKET;
+        this.clientEnableMetrics = enableSdkMetrics;
+
+        try {
+            connection = new AwsIotWebsocketConnection(this, awsAccessKeyId, awsSecretAccessKey, sessionToken, region, internalPort);
+        } catch (AWSIotException e) {
+            throw new AwsIotRuntimeException(e);
+        }
+    }
+
+    protected AbstractAwsIotClient(String clientEndpoint, String clientId, String awsAccessKeyId,
                                    String awsSecretAccessKey, String sessionToken) {
         // Enable Metrics by default
         this(clientEndpoint, clientId, awsAccessKeyId, awsSecretAccessKey, sessionToken, true);
+    }
+
+    protected AbstractAwsIotClient(String clientEndpoint, String clientId, String awsAccessKeyId,
+                                   String awsSecretAccessKey, String sessionToken, Integer port) {
+        // Enable Metrics by default
+        this(clientEndpoint, clientId, awsAccessKeyId, awsSecretAccessKey, sessionToken, true, port);
     }
 
     protected AbstractAwsIotClient(String clientEndpoint, String clientId, String awsAccessKeyId,
